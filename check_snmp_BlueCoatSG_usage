@@ -1,0 +1,189 @@
+#!/bin/bash
+#
+# check_snmp_BlueCoatSG_usage
+#
+# BlueCoat SG appliance environment check using SNMP
+# Copyright (c) 2010 Marko Pavlovic (plugins.from.marko@gmail.com)
+# Version: 1.2
+# Last Modified: October 2010
+# License: GPL v3 (-l for more info)"
+
+PATH=/bin:/usr/bin/:usr/sbin:/usr/local/bin:/usr/local/sbin
+PROGPATH=/usr/lib/nagios/plugins
+export PATH PROGPATH
+. $PROGPATH/utils.sh
+
+
+#OIDs:
+#*****************************************************************
+CPUUsagePercent=".1.3.6.1.4.1.3417.2.4.1.1.1.4.1"
+DiskUsagePercent=".1.3.6.1.4.1.3417.2.4.1.1.1.4.2"
+MemoryPressure=".1.3.6.1.4.1.3417.2.11.2.3.4.0"
+HttpClientConnections=".1.3.6.1.4.1.3417.2.11.3.1.3.1.0"
+HttpClientConnectionsActive=".1.3.6.1.4.1.3417.2.11.3.1.3.2.0"
+HttpClientConnectionsIdle=".1.3.6.1.4.1.3417.2.11.3.1.3.3.0"
+HttpServerConnections=".1.3.6.1.4.1.3417.2.11.3.1.3.4.0"
+HttpServerConnectionsActive=".1.3.6.1.4.1.3417.2.11.3.1.3.5.0"
+HttpServerConnectionsIdle=".1.3.6.1.4.1.3417.2.11.3.1.3.6.0"
+#*****************************************************************
+
+
+outputMessage=""
+Help ()
+{
+	echo
+        echo "check_snmp_BlueCoatSG_usage"
+        echo "Copyright (c) 2010 Marko Pavlovic (plugins.from.marko@gmail.com)"
+        echo "Version: 1.2"
+        echo "Last Modified: October 2010"
+        echo "License: GPL v3 (-l for more info)" 
+	echo
+	echo "Note:"
+	echo "This plugin does not require any MIB files or additional components."
+	echo
+	Usage
+}
+
+Usage ()
+{
+        echo
+        echo "Usage: check_snmp_BlueCoatSG_usage <community> <host> <device> <warning> <critical>"
+        echo
+	echo "community" 
+	echo -e "\tcommunity name for the host's SNMP agent"
+	echo 
+	echo "host"
+	echo -e "\thostname or IP address"
+	echo
+	echo "device"
+	echo -e "\tdevice name"
+	echo
+	echo -e "\tValid device names:"
+	echo
+	echo -e "\tcpu"
+	echo -e "\t\tcpu usage percentage"
+	echo
+	echo -e "\tdisk"
+	echo -e "\t\tdisk usage percentage"
+	echo
+	echo -e "\tmem"
+	echo -e "\t\tmemory usage percentage"
+	echo
+	echo -e "\tclientcon"
+	echo -e "\t\thttp client connections"
+	echo
+	echo -e "\tservercon"
+	echo -e "\t\thttp server connections"
+	echo
+	echo "Options:"
+	echo 
+	echo "-h, --help"
+	echo "	print help"
+	echo
+	echo "-l, --license"
+	echo "	print license info"
+	echo 
+}
+
+License ()
+{
+	echo
+	echo "check_snmp_BlueCoatSG_usage"	
+	echo "Copyright (c) 2010 Marko Pavlovic (plugins.from.marko@gmail.com)"
+	echo "Version: 1.2"
+	echo "Last Modified: October 2010"
+	echo
+	echo "This program is free software: you can redistribute it and/or modify"
+    	echo "it under the terms of the GNU General Public License as published by"
+    	echo "the Free Software Foundation, either version 3 of the License, or"
+    	echo "(at your option) any later version."
+	echo
+    	echo "This program is distributed in the hope that it will be useful,"
+    	echo "but WITHOUT ANY WARRANTY; without even the implied warranty of"
+    	echo "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the"
+    	echo "GNU General Public License for more details."
+	echo
+    	echo "You should have received a copy of the GNU General Public License"
+    	echo "along with this program.  If not, see <http://www.gnu.org/licenses/>."
+	echo
+}
+
+if [ $# -eq 1 ] && ([ "$1" == "-h" ] || [ "$1" == "--help" ]); then
+        Help
+        exit "$STATE_OK"
+else
+	if [ $# -eq 1 ] && ([ "$1" == "-l" ] || [ "$1" == "--license" ]); then
+		License
+		exit "$STATE_OK"
+	else
+        	if [ $# -ne 5 ]; then
+                Usage
+                exit "$STATE_UNKNOWN"
+       		fi
+	fi
+fi
+
+outputMessage=""
+performanceData=""
+performanceData1=""
+performanceData2=""
+SNMPCommunity="$1"
+ProxyAppliance="$2"
+Device="$3"
+warningTreshold="$4"
+criticalTreshold="$5"
+
+CPU ()
+{
+performanceData=`snmpget -v2c -c $SNMPCommunity $ProxyAppliance $CPUUsagePercent | awk -F "INTEGER: " '{print $2}'`
+outputMessage="$performanceData%|'CPU'=$performanceData"
+}
+
+Disk ()
+{
+performanceData=`snmpget -v2c -c $SNMPCommunity $ProxyAppliance $DiskUsagePercent | awk -F "INTEGER: " '{print $2}'`
+outputMessage="$performanceData%|'Disk'=$performanceData"
+}
+
+Mem ()
+{
+performanceData=`snmpget -v2c -c $SNMPCommunity $ProxyAppliance $MemoryPressure | awk -F "Gauge32: " '{print $2}'`
+outputMessage="$performanceData%|'Mem'=$performanceData"
+}
+
+ClientCon ()
+{
+performanceData=`snmpget -v2c -c $SNMPCommunity $ProxyAppliance $HttpClientConnections | awk -F "Gauge32: " '{print $2}'`
+performanceData2=`snmpget -v2c -c $SNMPCommunity $ProxyAppliance $HttpClientConnectionsActive | awk -F "Gauge32: " '{print $2}'`
+performanceData3=$[performanceData-performanceData2]
+outputMessage="$performanceData connections: $performanceData2 active, $performanceData3 idle|'clientcon'=$performanceData;'clientcon_active'=$performanceData2;'clientcon_idle'=$performanceData3"
+}
+
+ServerCon ()
+{
+performanceData=`snmpget -v2c -c $SNMPCommunity $ProxyAppliance $HttpServerConnections | awk -F "Gauge32: " '{print $2}'`
+performanceData2=`snmpget -v2c -c $SNMPCommunity $ProxyAppliance $HttpServerConnectionsActive | awk -F "Gauge32: " '{print $2}'`
+performanceData3=$[performanceData-performanceData2]
+outputMessage="$performanceData connections: $performanceData2 active, $performanceData3 idle|'servercon'=$performanceData;'servercon_active'=$performanceData2;'servercon_idle'=$performanceData3"
+}
+
+case $Device in
+        "cpu") CPU ;;
+        "disk") Disk ;;
+        "mem") Mem ;;
+        "clientcon") ClientCon ;;
+        "servercon") ServerCon ;;
+        *) Usage; exit "$STATE_UNKNOWN" ;;
+        esac
+
+echo $outputMessage
+
+if [ $performanceData -ge $criticalTreshold ]; then
+	exit $STATE_CRITICAL
+else
+	if ([ $performanceData -lt $criticalTreshold ]&&[ $performanceData -ge $warningTreshold ]); then
+		exit $STATE_WARNING
+	else
+		exit $STATE_OK
+	fi
+fi
